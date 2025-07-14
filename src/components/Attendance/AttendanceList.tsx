@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { Calendar, Download, Filter, CheckCircle, XCircle, Clock } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
 import { Attendance, Student, Subject } from '../../types'
 import { useAuth } from '../../contexts/AuthContext'
+import { mockAttendance, mockStudents, mockSubjects } from '../../lib/mockData'
 import { format, startOfMonth, endOfMonth } from 'date-fns'
 import { es } from 'date-fns/locale'
 import jsPDF from 'jspdf'
@@ -25,55 +25,38 @@ const AttendanceList: React.FC = () => {
       const monthStart = startOfMonth(new Date(selectedMonth))
       const monthEnd = endOfMonth(new Date(selectedMonth))
 
-      // Fetch attendance
-      let attendanceQuery = supabase
-        .from('attendance')
-        .select(`
-          *,
-          student:students(*),
-          subject:subjects(*)
-        `)
-        .gte('date', format(monthStart, 'yyyy-MM-dd'))
-        .lte('date', format(monthEnd, 'yyyy-MM-dd'))
-
+      // Filter attendance based on month and user role
+      let filteredAttendance = mockAttendance.filter(a => {
+        const attendanceDate = new Date(a.date)
+        return attendanceDate >= monthStart && attendanceDate <= monthEnd
+      })
+      
       if (selectedStudent) {
-        attendanceQuery = attendanceQuery.eq('student_id', selectedStudent)
+        filteredAttendance = filteredAttendance.filter(a => a.student_id === selectedStudent)
       }
-
+      
       if (user?.role === 'docente') {
-        attendanceQuery = attendanceQuery.eq('subjects.teacher_id', user.id)
+        filteredAttendance = filteredAttendance.filter(a => a.subject?.teacher_id === user.id)
       } else if (user?.role === 'familia') {
-        attendanceQuery = attendanceQuery.eq('students.parent_id', user.id)
+        const userStudentIds = mockStudents.filter(s => s.parent_id === user.id).map(s => s.id)
+        filteredAttendance = filteredAttendance.filter(a => userStudentIds.includes(a.student_id))
       }
-
-      const { data: attendanceData, error: attendanceError } = await attendanceQuery
-
-      if (attendanceError) throw attendanceError
-      setAttendance(attendanceData || [])
-
-      // Fetch students for filter
-      let studentsQuery = supabase.from('students').select('*')
       
+      setAttendance(filteredAttendance)
+      
+      // Filter students based on user role
+      let filteredStudents = mockStudents
       if (user?.role === 'familia') {
-        studentsQuery = studentsQuery.eq('parent_id', user.id)
+        filteredStudents = mockStudents.filter(s => s.parent_id === user.id)
       }
-
-      const { data: studentsData, error: studentsError } = await studentsQuery
-
-      if (studentsError) throw studentsError
-      setStudents(studentsData || [])
-
-      // Fetch subjects
-      let subjectsQuery = supabase.from('subjects').select('*')
+      setStudents(filteredStudents)
       
+      // Filter subjects based on user role
+      let filteredSubjects = mockSubjects
       if (user?.role === 'docente') {
-        subjectsQuery = subjectsQuery.eq('teacher_id', user.id)
+        filteredSubjects = mockSubjects.filter(s => s.teacher_id === user.id)
       }
-
-      const { data: subjectsData, error: subjectsError } = await subjectsQuery
-
-      if (subjectsError) throw subjectsError
-      setSubjects(subjectsData || [])
+      setSubjects(filteredSubjects)
 
     } catch (error) {
       console.error('Error fetching data:', error)

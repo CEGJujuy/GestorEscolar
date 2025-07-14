@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Users, BookOpen, ClipboardCheck, Bell, Calendar, TrendingUp } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { supabase } from '../../lib/supabase'
+import { mockStudents, mockCourses, mockNotifications, mockEvents } from '../../lib/mockData'
 
 interface DashboardStats {
   students: number
@@ -26,18 +26,27 @@ const Dashboard: React.FC = () => {
 
   const fetchStats = async () => {
     try {
-      const [studentsRes, coursesRes, notificationsRes, eventsRes] = await Promise.all([
-        supabase.from('students').select('id', { count: 'exact' }),
-        supabase.from('courses').select('id', { count: 'exact' }),
-        supabase.from('notifications').select('id', { count: 'exact' }).eq('recipient_id', user?.id),
-        supabase.from('events').select('id', { count: 'exact' }),
-      ])
+      // Mock data filtering based on user role
+      let studentsCount = mockStudents.length
+      let coursesCount = mockCourses.length
+      let notificationsCount = mockNotifications.filter(n => n.recipient_id === user?.id).length
+      let eventsCount = mockEvents.length
+      
+      if (user?.role === 'docente') {
+        studentsCount = mockStudents.filter(s => s.course?.teacher_id === user.id).length
+        coursesCount = mockCourses.filter(c => c.teacher_id === user.id).length
+      } else if (user?.role === 'familia') {
+        studentsCount = mockStudents.filter(s => s.parent_id === user.id).length
+        coursesCount = mockCourses.filter(c => 
+          mockStudents.some(s => s.parent_id === user.id && s.course_id === c.id)
+        ).length
+      }
 
       setStats({
-        students: studentsRes.count || 0,
-        courses: coursesRes.count || 0,
-        notifications: notificationsRes.count || 0,
-        events: eventsRes.count || 0,
+        students: studentsCount,
+        courses: coursesCount,
+        notifications: notificationsCount,
+        events: eventsCount,
       })
     } catch (error) {
       console.error('Error fetching stats:', error)

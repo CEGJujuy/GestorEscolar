@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { Plus, Calendar as CalendarIcon, Clock, MapPin } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
 import { Event } from '../../types'
 import { useAuth } from '../../contexts/AuthContext'
+import { mockEvents } from '../../lib/mockData'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isToday } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -29,18 +29,13 @@ const CalendarView: React.FC = () => {
       const monthStart = startOfMonth(currentDate)
       const monthEnd = endOfMonth(currentDate)
 
-      const { data, error } = await supabase
-        .from('events')
-        .select(`
-          *,
-          creator:users(*)
-        `)
-        .gte('date', format(monthStart, 'yyyy-MM-dd'))
-        .lte('date', format(monthEnd, 'yyyy-MM-dd'))
-        .order('date', { ascending: true })
-
-      if (error) throw error
-      setEvents(data || [])
+      // Filter events for the current month
+      const filteredEvents = mockEvents.filter(event => {
+        const eventDate = new Date(event.date)
+        return eventDate >= monthStart && eventDate <= monthEnd
+      }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      
+      setEvents(filteredEvents)
     } catch (error) {
       console.error('Error fetching events:', error)
     } finally {
@@ -54,17 +49,21 @@ const CalendarView: React.FC = () => {
     }
 
     try {
-      const { error } = await supabase
-        .from('events')
-        .insert({
-          title: newEvent.title,
-          description: newEvent.description,
-          date: newEvent.date,
-          time: newEvent.time,
-          created_by: user?.id
-        })
-
-      if (error) throw error
+      const newEventData = {
+        id: `event-${Date.now()}`,
+        title: newEvent.title,
+        description: newEvent.description,
+        date: newEvent.date,
+        time: newEvent.time,
+        created_by: user?.id || '',
+        created_at: new Date().toISOString(),
+        creator: user
+      }
+      
+      // Add to events list (in real app, this would be saved to database)
+      setEvents(prev => [...prev, newEventData].sort((a, b) => 
+        new Date(a.date).getTime() - new Date(b.date).getTime()
+      ))
 
       // Reset form
       setNewEvent({
@@ -74,9 +73,6 @@ const CalendarView: React.FC = () => {
         time: ''
       })
       setShowNewEvent(false)
-      
-      // Refresh events
-      fetchEvents()
     } catch (error) {
       console.error('Error creating event:', error)
     }

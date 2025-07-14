@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { Plus, Download, FileText, Upload, Search } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
 import { Material, Course } from '../../types'
 import { useAuth } from '../../contexts/AuthContext'
+import { mockMaterials, mockCourses, mockStudents } from '../../lib/mockData'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -27,61 +27,37 @@ const MaterialsList: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      // Fetch materials
-      let materialsQuery = supabase
-        .from('materials')
-        .select(`
-          *,
-          course:courses(*),
-          uploader:users(*)
-        `)
-        .order('created_at', { ascending: false })
-
+      // Filter materials based on user role and selections
+      let filteredMaterials = [...mockMaterials].sort((a, b) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+      
       if (selectedCourse) {
-        materialsQuery = materialsQuery.eq('course_id', selectedCourse)
+        filteredMaterials = filteredMaterials.filter(m => m.course_id === selectedCourse)
       }
-
-      if (user?.role === 'docente') {
-        materialsQuery = materialsQuery.eq('uploaded_by', user.id)
-      } else if (user?.role === 'familia') {
-        // Get courses of user's children
-        const { data: students } = await supabase
-          .from('students')
-          .select('course_id')
-          .eq('parent_id', user.id)
-        
-        const courseIds = students?.map(s => s.course_id) || []
-        if (courseIds.length > 0) {
-          materialsQuery = materialsQuery.in('course_id', courseIds)
-        }
-      }
-
-      const { data: materialsData, error: materialsError } = await materialsQuery
-
-      if (materialsError) throw materialsError
-      setMaterials(materialsData || [])
-
-      // Fetch courses
-      let coursesQuery = supabase.from('courses').select('*')
       
       if (user?.role === 'docente') {
-        coursesQuery = coursesQuery.eq('teacher_id', user.id)
+        filteredMaterials = filteredMaterials.filter(m => m.uploaded_by === user.id)
       } else if (user?.role === 'familia') {
-        const { data: students } = await supabase
-          .from('students')
-          .select('course_id')
-          .eq('parent_id', user.id)
-        
-        const courseIds = students?.map(s => s.course_id) || []
-        if (courseIds.length > 0) {
-          coursesQuery = coursesQuery.in('id', courseIds)
-        }
+        const userCourseIds = mockStudents
+          .filter(s => s.parent_id === user.id)
+          .map(s => s.course_id)
+        filteredMaterials = filteredMaterials.filter(m => userCourseIds.includes(m.course_id))
       }
-
-      const { data: coursesData, error: coursesError } = await coursesQuery
-
-      if (coursesError) throw coursesError
-      setCourses(coursesData || [])
+      
+      setMaterials(filteredMaterials)
+      
+      // Filter courses based on user role
+      let filteredCourses = mockCourses
+      if (user?.role === 'docente') {
+        filteredCourses = mockCourses.filter(c => c.teacher_id === user.id)
+      } else if (user?.role === 'familia') {
+        const userCourseIds = mockStudents
+          .filter(s => s.parent_id === user.id)
+          .map(s => s.course_id)
+        filteredCourses = mockCourses.filter(c => userCourseIds.includes(c.id))
+      }
+      setCourses(filteredCourses)
 
     } catch (error) {
       console.error('Error fetching data:', error)
@@ -96,21 +72,20 @@ const MaterialsList: React.FC = () => {
     }
 
     try {
-      // In a real implementation, you would upload the file to Supabase Storage
-      // For now, we'll simulate with a placeholder URL
-      const fileUrl = `https://example.com/files/${newMaterial.file.name}`
-
-      const { error } = await supabase
-        .from('materials')
-        .insert({
-          title: newMaterial.title,
-          description: newMaterial.description,
-          file_url: fileUrl,
-          course_id: newMaterial.course_id,
-          uploaded_by: user?.id
-        })
-
-      if (error) throw error
+      const newMaterialData = {
+        id: `mat-${Date.now()}`,
+        title: newMaterial.title,
+        description: newMaterial.description,
+        file_url: `https://example.com/files/${newMaterial.file.name}`,
+        course_id: newMaterial.course_id,
+        uploaded_by: user?.id || '',
+        created_at: new Date().toISOString(),
+        course: mockCourses.find(c => c.id === newMaterial.course_id),
+        uploader: user
+      }
+      
+      // Add to materials list (in real app, this would be saved to database)
+      setMaterials(prev => [newMaterialData, ...prev])
 
       // Reset form
       setNewMaterial({
@@ -120,9 +95,6 @@ const MaterialsList: React.FC = () => {
         file: null
       })
       setShowUpload(false)
-      
-      // Refresh materials
-      fetchData()
     } catch (error) {
       console.error('Error uploading material:', error)
     }

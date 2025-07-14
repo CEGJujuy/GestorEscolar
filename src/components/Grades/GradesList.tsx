@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { Plus, Search, Download, Filter } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
 import { Grade, Student, Subject } from '../../types'
 import { useAuth } from '../../contexts/AuthContext'
+import { mockGrades, mockStudents, mockSubjects } from '../../lib/mockData'
 import jsPDF from 'jspdf'
 
 const GradesList: React.FC = () => {
@@ -20,54 +20,35 @@ const GradesList: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      // Fetch grades
-      let gradesQuery = supabase
-        .from('grades')
-        .select(`
-          *,
-          student:students(*),
-          subject:subjects(*)
-        `)
-        .eq('trimester', selectedTrimester)
-
+      // Filter grades based on user role and selections
+      let filteredGrades = mockGrades.filter(g => g.trimester === selectedTrimester)
+      
       if (selectedStudent) {
-        gradesQuery = gradesQuery.eq('student_id', selectedStudent)
+        filteredGrades = filteredGrades.filter(g => g.student_id === selectedStudent)
       }
-
+      
       if (user?.role === 'docente') {
-        gradesQuery = gradesQuery.eq('subjects.teacher_id', user.id)
+        filteredGrades = filteredGrades.filter(g => g.subject?.teacher_id === user.id)
       } else if (user?.role === 'familia') {
-        gradesQuery = gradesQuery.eq('students.parent_id', user.id)
+        const userStudentIds = mockStudents.filter(s => s.parent_id === user.id).map(s => s.id)
+        filteredGrades = filteredGrades.filter(g => userStudentIds.includes(g.student_id))
       }
-
-      const { data: gradesData, error: gradesError } = await gradesQuery
-
-      if (gradesError) throw gradesError
-      setGrades(gradesData || [])
-
-      // Fetch students for filter
-      let studentsQuery = supabase.from('students').select('*')
       
+      setGrades(filteredGrades)
+      
+      // Filter students based on user role
+      let filteredStudents = mockStudents
       if (user?.role === 'familia') {
-        studentsQuery = studentsQuery.eq('parent_id', user.id)
+        filteredStudents = mockStudents.filter(s => s.parent_id === user.id)
       }
-
-      const { data: studentsData, error: studentsError } = await studentsQuery
-
-      if (studentsError) throw studentsError
-      setStudents(studentsData || [])
-
-      // Fetch subjects
-      let subjectsQuery = supabase.from('subjects').select('*')
+      setStudents(filteredStudents)
       
+      // Filter subjects based on user role
+      let filteredSubjects = mockSubjects
       if (user?.role === 'docente') {
-        subjectsQuery = subjectsQuery.eq('teacher_id', user.id)
+        filteredSubjects = mockSubjects.filter(s => s.teacher_id === user.id)
       }
-
-      const { data: subjectsData, error: subjectsError } = await subjectsQuery
-
-      if (subjectsError) throw subjectsError
-      setSubjects(subjectsData || [])
+      setSubjects(filteredSubjects)
 
     } catch (error) {
       console.error('Error fetching data:', error)

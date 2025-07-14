@@ -1,11 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { User as SupabaseUser } from '@supabase/supabase-js'
-import { supabase } from '../lib/supabase'
 import { User } from '../types'
+import { mockUsers } from '../lib/mockData'
 
 interface AuthContextType {
   user: User | null
-  supabaseUser: SupabaseUser | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
@@ -23,69 +21,47 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
-  const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSupabaseUser(session?.user ?? null)
-      if (session?.user) {
-        fetchUserProfile(session.user.id)
-      } else {
-        setLoading(false)
-      }
-    })
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setSupabaseUser(session?.user ?? null)
-        if (session?.user) {
-          await fetchUserProfile(session.user.id)
-        } else {
-          setUser(null)
-          setLoading(false)
-        }
-      }
-    )
-
-    return () => subscription.unsubscribe()
+    // Check for existing session in localStorage
+    const savedUser = localStorage.getItem('currentUser')
+    if (savedUser) {
+      setUser(JSON.parse(savedUser))
+    }
+    setLoading(false)
   }, [])
 
-  const fetchUserProfile = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single()
-
-      if (error) throw error
-      setUser(data)
-    } catch (error) {
-      console.error('Error fetching user profile:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-    if (error) throw error
+    // Mock authentication - find user by email
+    const foundUser = mockUsers.find(u => u.email === email)
+    
+    if (!foundUser) {
+      throw new Error('Usuario no encontrado')
+    }
+    
+    // Simple password validation (in real app, this would be properly hashed)
+    const validPasswords: Record<string, string> = {
+      'director@instituto.edu': 'director123',
+      'docente@instituto.edu': 'docente123',
+      'familia@instituto.edu': 'familia123'
+    }
+    
+    if (validPasswords[email] !== password) {
+      throw new Error('Contraseña incorrecta')
+    }
+    
+    setUser(foundUser)
+    localStorage.setItem('currentUser', JSON.stringify(foundUser))
   }
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut()
-    if (error) throw error
+    setUser(null)
+    localStorage.removeItem('currentUser')
   }
 
   const value = {
     user,
-    supabaseUser,
     loading,
     signIn,
     signOut,

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { Plus, Search, Edit, Trash2, Eye } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
 import { Student } from '../../types'
 import { useAuth } from '../../contexts/AuthContext'
+import { mockStudents } from '../../lib/mockData'
 
 const StudentList: React.FC = () => {
   const { user } = useAuth()
@@ -16,24 +16,15 @@ const StudentList: React.FC = () => {
 
   const fetchStudents = async () => {
     try {
-      let query = supabase
-        .from('students')
-        .select(`
-          *,
-          course:courses(*)
-        `)
-
-      // Filter based on user role
+      let filteredStudents = mockStudents
+      
       if (user?.role === 'docente') {
-        query = query.eq('courses.teacher_id', user.id)
+        filteredStudents = mockStudents.filter(s => s.course?.teacher_id === user.id)
       } else if (user?.role === 'familia') {
-        query = query.eq('parent_id', user.id)
+        filteredStudents = mockStudents.filter(s => s.parent_id === user.id)
       }
 
-      const { data, error } = await query
-
-      if (error) throw error
-      setStudents(data || [])
+      setStudents(filteredStudents)
     } catch (error) {
       console.error('Error fetching students:', error)
     } finally {

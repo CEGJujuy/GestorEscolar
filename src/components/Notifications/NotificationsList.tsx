@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { Plus, Send, Bell, MessageSquare, Users } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
 import { Notification, Student } from '../../types'
 import { useAuth } from '../../contexts/AuthContext'
+import { mockNotifications, mockStudents } from '../../lib/mockData'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -27,23 +27,15 @@ const NotificationsList: React.FC = () => {
 
   const fetchNotifications = async () => {
     try {
-      let query = supabase
-        .from('notifications')
-        .select(`
-          *,
-          sender:users!notifications_sender_id_fkey(*),
-          recipient:users!notifications_recipient_id_fkey(*)
-        `)
-        .order('created_at', { ascending: false })
-
+      let filteredNotifications = [...mockNotifications].sort((a, b) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+      
       if (user?.role === 'familia') {
-        query = query.eq('recipient_id', user.id)
+        filteredNotifications = filteredNotifications.filter(n => n.recipient_id === user.id)
       }
 
-      const { data, error } = await query
-
-      if (error) throw error
-      setNotifications(data || [])
+      setNotifications(filteredNotifications)
     } catch (error) {
       console.error('Error fetching notifications:', error)
     } finally {
@@ -53,18 +45,12 @@ const NotificationsList: React.FC = () => {
 
   const fetchStudents = async () => {
     try {
-      let query = supabase
-        .from('students')
-        .select('*, parent:users!students_parent_id_fkey(*)')
-
+      let filteredStudents = mockStudents
       if (user?.role === 'docente') {
-        query = query.eq('courses.teacher_id', user.id)
+        filteredStudents = mockStudents.filter(s => s.course?.teacher_id === user.id)
       }
 
-      const { data, error } = await query
-
-      if (error) throw error
-      setStudents(data || [])
+      setStudents(filteredStudents)
     } catch (error) {
       console.error('Error fetching students:', error)
     }
@@ -76,19 +62,20 @@ const NotificationsList: React.FC = () => {
     }
 
     try {
-      const notifications = newNotification.recipients.map(recipientId => ({
+      const newNotifications = newNotification.recipients.map(recipientId => ({
+        id: `notif-${Date.now()}-${Math.random()}`,
         title: newNotification.title,
         message: newNotification.message,
         recipient_id: recipientId,
         sender_id: user?.id,
-        read: false
+        read: false,
+        created_at: new Date().toISOString(),
+        sender: user,
+        recipient: mockStudents.find(s => s.parent_id === recipientId)
       }))
 
-      const { error } = await supabase
-        .from('notifications')
-        .insert(notifications)
-
-      if (error) throw error
+      // Add to mock notifications (in real app, this would be saved to database)
+      setNotifications(prev => [...newNotifications, ...prev])
 
       // Reset form
       setNewNotification({
@@ -97,9 +84,6 @@ const NotificationsList: React.FC = () => {
         recipients: []
       })
       setShowNewNotification(false)
-      
-      // Refresh notifications
-      fetchNotifications()
 
       // Here you would integrate with WhatsApp API
       // sendWhatsAppNotifications(notifications)
@@ -111,13 +95,6 @@ const NotificationsList: React.FC = () => {
 
   const markAsRead = async (notificationId: string) => {
     try {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true })
-        .eq('id', notificationId)
-
-      if (error) throw error
-
       setNotifications(prev => 
         prev.map(notif => 
           notif.id === notificationId 
